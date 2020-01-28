@@ -29,6 +29,7 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -65,6 +66,11 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 13 || r_scause() == 15) {
+      if (map_lazy_page(p, r_stval()) == -1) {
+          printf("            LAZY PAGE ALLOCATION FAILED\n");
+          p->killed = 1;
+      }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
