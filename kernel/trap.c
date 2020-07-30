@@ -65,6 +65,12 @@ usertrap(void)
     intr_on();
 
     syscall();
+  }
+  else if(r_scause() == 15){
+    if(cow_alloc(r_stval(), p->pagetable) != 0){
+      printf("copy on write failed: scause %p pid=%d\n", r_scause(), p->pid);
+      p->killed = 1;
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

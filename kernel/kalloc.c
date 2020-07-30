@@ -14,6 +14,8 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
+static unsigned char references[(PHYSTOP - KERNBASE) / PGSIZE];
+
 struct run {
   struct run *next;
 };
@@ -47,9 +49,20 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  unsigned char reference_count;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  if(pa){
+    reference_count = references[((uint64)pa - KERNBASE) / PGSIZE];
+    if(reference_count)
+      references[((uint64) pa - KERNBASE) / PGSIZE] = reference_count - 1;
+
+    if(reference_count > 1)
+      return;
+  }
+
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -77,6 +90,25 @@ kalloc(void)
   release(&kmem.lock);
 
   if(r)
+  {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    references[((uint64)r - KERNBASE) / PGSIZE] = 1;
+  }
   return (void*)r;
+}
+
+void
+kadd_reference(void *pa)
+{
+  unsigned char reference_count;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("add_reference");
+
+  reference_count = references[((uint64) pa - KERNBASE) / PGSIZE];
+
+  if(reference_count == 0 || reference_count == 255)
+    panic("add_reference");
+
+  references[((uint64)pa - KERNBASE) / PGSIZE] = reference_count + 1;
 }
