@@ -77,8 +77,17 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+    if (p->alarm_state.ticks) {
+      p->alarm_state.ticks_left--;
+      if (p->alarm_state.ticks_left == 0) {
+        p->alarm_state.saved_tf = *p->tf;
+        p->tf->epc = p->alarm_state.callback;
+        usertrapret();
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
@@ -209,5 +218,33 @@ devintr()
   } else {
     return 0;
   }
+}
+
+uint64 sys_sigalarm(void)
+{
+  int num_ticks;
+  uint64 callback;
+  struct proc *p = myproc();
+
+  if(argint(0, &num_ticks) < 0)
+    return -1;
+
+  if(argaddr(1, &callback) < 0)
+    return -1;
+
+  p->alarm_state.callback = callback;
+  p->alarm_state.ticks = num_ticks;
+  p->alarm_state.ticks_left = num_ticks;
+
+  return 0;
+}
+
+uint64 sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+
+  p->alarm_state.ticks_left = p->alarm_state.ticks;
+  *(p->tf) = p->alarm_state.saved_tf;
+  return 0;
 }
 
