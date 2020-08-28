@@ -68,6 +68,11 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 15 || r_scause() == 13){ // Page not mapped
+    if(mmap_alloc(p->vma, r_stval(), p->pagetable, r_scause()) != 0){
+      printf("lazy mmap failed: scause %p pid=%d\n", r_scause(), p->pid);
+      p->killed = 1;
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

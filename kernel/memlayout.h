@@ -66,3 +66,4 @@
 //   TRAPFRAME (p->tf, used by the trampoline)
 //   TRAMPOLINE (the same page as in the kernel)
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+#define VMA_START (TRAPFRAME - PGSIZE * FSSIZE) // each fs block has at least of vm page. 

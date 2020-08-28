@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct vma;
 
 // bio.c
 void            binit(void);
@@ -206,3 +207,9 @@ void lst_push(struct list*, void *);
 void *lst_pop(struct list*);
 void lst_print(struct list*);
 int lst_empty(struct list*);
+
+// mmap.c
+int mmap_alloc(struct vma *vma, uint64 addr, pagetable_t pagetable, int cause);
+struct vma *vma_alloc(struct vma *vma, int length);
+int vma_unmap(struct proc *p, uint64 addr, int length);
+void vma_dup(struct proc *p, struct proc *np);

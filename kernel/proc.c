@@ -41,6 +41,7 @@ procinit(void)
       uint64 va = KSTACK((int) (p - proc));
       kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
       p->kstack = va;
+      memset(p->vma, 0, sizeof(p->vma));
   }
   kvminithart();
 }
@@ -261,6 +262,9 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
+  vma_dup(p, np);
+
   np->sz = p->sz;
 
   np->parent = p;
@@ -321,6 +325,7 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
+  struct vma *v = 0;
 
   if(p == initproc)
     panic("init exiting");
@@ -336,6 +341,11 @@ exit(int status)
 
   begin_op(ROOTDEV);
   iput(p->cwd);
+
+  for(v = p->vma; v != &p->vma[NVMA]; v++){
+    if(v->used)
+      vma_unmap(p, v->addr, v->length);
+  }
   end_op(ROOTDEV);
   p->cwd = 0;
 

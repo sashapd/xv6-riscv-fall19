@@ -483,3 +483,46 @@ sys_pipe(void)
   return 0;
 }
 
+uint64
+sys_mmap(void)
+{
+  struct proc *p;
+  int length, prot, flags, offset;
+  struct vma *v;
+  struct file *f;
+
+  if(argint(1, &length) < 0 || argint(2, &flags) < 0 ||
+    argint(3, &prot) < 0 || argfd(4, 0, &f) < 0 || argint(5, &offset) ||
+    !flags){
+    return -1;
+  }
+
+  if(!f->writable && (flags & PROT_WRITE) && prot == MAP_SHARED)
+    return -1;
+
+  p = myproc();
+
+  v = vma_alloc(p->vma, length);
+
+  v->prot = prot;
+  v->flags = flags;
+  v->file = filedup(f);
+  v->offset = offset;
+
+  return (uint64)v->addr;
+}
+
+uint64
+sys_munmap(void)
+{
+  struct proc *p;
+  uint64 addr;
+  int length;
+
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0)
+    return -1;
+
+  p = myproc();
+
+  return vma_unmap(p, addr, length);
+}
