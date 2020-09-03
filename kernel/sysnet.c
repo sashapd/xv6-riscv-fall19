@@ -87,16 +87,104 @@ bad:
 // and writing for network sockets.
 //
 
+void sockclose(struct sock *s){
+  struct sock *prev;
+
+  acquire(&lock);
+  acquire(&s->lock);
+
+  if(sockets == s)
+    sockets = s->next;
+  else{
+    for(prev = sockets; prev; prev = prev->next){
+      if(prev->next == s){
+        prev->next = prev->next->next;
+        break;
+      }
+    }
+  }
+
+  while(!mbufq_empty(&s->rxq))
+    mbuffree(mbufq_pophead(&s->rxq));
+
+  release(&s->lock);
+  kfree(s);
+  release(&lock);
+}
+
+int sockwrite(struct sock *s, uint64 addr, int n){
+  struct mbuf *m;
+  struct proc *pr = myproc();
+
+  if(n > MBUF_SIZE - MBUF_DEFAULT_HEADROOM)
+    return -1;
+
+  if((m = mbufalloc(MBUF_DEFAULT_HEADROOM)) == 0)
+    return -1;
+  copyin(pr->pagetable, m->head, addr, n);
+  mbufput(m, n);
+  acquire(&s->lock);
+  net_tx_udp(m, s->raddr, s->lport, s->rport);
+  release(&s->lock);
+  return n;
+}
+
+int sockread(struct sock *s, uint64 addr, int n){
+  struct mbuf *m;
+  struct proc *pr = myproc();
+  char *data;
+  int received_bytes = 0;
+
+  acquire(&s->lock);
+  while(mbufq_empty(&s->rxq)){
+    if(myproc()->killed){
+      release(&s->lock);
+      return -1;
+    }
+    sleep(s, &s->lock);
+  }
+  if(!mbufq_empty(&s->rxq) && n > 0){
+    if(n >= s->rxq.head->len){
+      m = mbufq_pophead(&s->rxq);
+      data = m->head;
+      copyout(pr->pagetable, addr, data, m->len);
+      n -= m->len;
+      addr += m->len;
+      received_bytes += m->len;
+      mbuffree(m);
+    } else {
+      m = s->rxq.head;
+      data = mbufpull(m, n);
+      copyout(pr->pagetable, addr, data, n);
+      received_bytes += n;
+      n = 0;
+    }
+  }
+  release(&s->lock);
+  return received_bytes;
+}
+
 // called by protocol handler layer to deliver UDP packets
 void
 sockrecvudp(struct mbuf *m, uint32 raddr, uint16 lport, uint16 rport)
 {
-  //
-  // Your code here.
-  //
-  // Find the socket that handles this mbuf and deliver it, waking
-  // any sleeping reader. Free the mbuf if there are no sockets
-  // registered to handle it.
-  //
-  mbuffree(m);
+  struct sock *s;
+
+
+  acquire(&lock);
+  for(s = sockets; s; s = s->next){
+    if(s->raddr == raddr && s->lport == lport && s->rport == rport)
+      break;
+  }
+  release(&lock);
+
+  if(!s){
+    return mbuffree(m);
+  }
+
+  acquire(&s->lock);
+  mbufq_pushtail(&s->rxq, m);
+  release(&s->lock);
+
+  wakeup(s);
 }
